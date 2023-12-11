@@ -1,6 +1,3 @@
-# Ignore target folder
-target/
-
 # Ignore DS_STORE files
 .DS_STORE
 
