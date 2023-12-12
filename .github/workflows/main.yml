@@ -3,6 +3,7 @@ on: workflow_dispatch
 env: 
   AWS_REGION: us-east-1
   ECR_REPOSITORY: vpro-app-image
+  EKS_CLUSTER: vprofile-k8s-cluster
 jobs:
   Testing:
     runs-on: ubuntu-latest
@@ -61,7 +62,7 @@ jobs:
          registry: ${{ secrets.REGISTRY }}
          repo: ${{ env.ECR_REPOSITORY }}
          region: ${{ env.AWS_REGION }}
-         tags: latest,${{ github.sha }}
+         tags: latest,${{ github.run_number }}
          daemon_off: false
          dockerfile: ./Dockerfile
          context: ./
@@ -76,7 +77,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with: 
-          image-ref: '${{ secrets.REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}'
+          image-ref: '${{ secrets.REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.run_number }}'
           format: 'sarif'
           output: 'trivy-results.sarif' 
         env:
@@ -89,8 +90,44 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
-  SlackNotification:
+  DeployToEKS:
     needs: [BUILD_AND_PUBLISH, TRIVY_SCAN]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get kube config file 
+        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER }}
+
+      - name: Print config file 
+        run: cat ~/.kube/config
+
+      - name: Login to ECR 
+        run: kubectl create secret docker-registry regcred --docker-server=${{ secrets.REGISTRY }} --docker-username=AWS  --docker-password=$(aws ecr get-login-password)
+
+      - name: Deploy Helm
+        uses: bitovi/github-actions-deploy-eks-helm@v1.2.8
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          cluster-name: ${{ env.EKS_CLUSTER }}
+          chart-path: helm/vprofilecharts
+          namespace: default
+          values: appimage=${{ secrets.REGISTRY }}/${{ env.ECR_REPOSITORY }},apptag=${{ github.run_number }}
+          name: vprofile-stack
+
+
+  SlackNotification:
+    needs: DeployToEKS
     runs-on: ubuntu-latest
     steps:
       - name: Send a Slack Notification
