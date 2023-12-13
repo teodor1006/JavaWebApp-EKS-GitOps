@@ -1,4 +1,6 @@
-# **Deployment of 3-tier Java Web Application on Amazon EKS using GitHub Actions**
+# **Deployment of 3-tier Java Web Application on Amazon EKS using GitOps**
+
+![flow](images/diagramm.png)
 
 ## **Prerequisites** 
 
