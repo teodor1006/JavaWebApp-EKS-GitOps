@@ -185,7 +185,7 @@ def create_ecr_repository():
 if __name__=='__main__':
     create_ecr_repository()
 ```
-![ecr](images/image.png)
+![ecr](images/ecr-image.png)
 
 
 ## **Part 6: Build and Push a DockerImage to your Amazon ECR Repo**
